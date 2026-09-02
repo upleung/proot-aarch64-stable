@@ -2,10 +2,10 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-const SSH_PORT = '24631';
+const SSH_PORT = '24673';
 
 const prootPath = path.join(__dirname, 'bin/proot');
-const rootfsPath = path.join(__dirname, 'my-linux/alpine');
+const rootfsPath = path.join(__dirname, 'my-linux/debian');
 
 if (fs.existsSync(prootPath)) {
     try { fs.chmodSync(prootPath, '0755'); } catch (e) {}
