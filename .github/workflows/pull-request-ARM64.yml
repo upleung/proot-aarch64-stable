@@ -23,7 +23,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
         
       - name: Build static PRoot in ARM64 Alpine
-        # 终极修复：增加 HAS_TALLOC=1 强制使用系统库，移除所有链接冲突
+        # 终极修复：将 -ltalloc 移至 LDFLAGS 并补充 CFLAGS，确保静态符号被强行链接入二进制文件
         run: |
           docker run --rm --platform linux/arm64 -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "\
             apk update && \
@@ -31,7 +31,7 @@ jobs:
             git config --global --add safe.directory /workspace && \
             sed -i '1i#include <libgen.h>' src/cli/cli.c && \
             sed -i '1i#include \"tracee/mem.h\"' src/tracee/tracee.c && \
-            make -C src clean proot HAS_TALLOC=1 LDFLAGS='-static' LDLIBS='-ltalloc' && \
+            make -C src clean proot HAS_TALLOC=1 LDFLAGS='-static -ltalloc' CFLAGS='-I/usr/include' && \
             mv src/proot /workspace/proot-aarch64-static \
           "
 
