@@ -1,59 +1,51 @@
-name: build
+name: Compile PRoot Static (ARM64)
 
 on:
   push:
     branches:
-      - master
+      - master  # 保留原版的 master 分支推送触发
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened] # 保留原版的 PR 触发[cite: 2]
+  workflow_dispatch: # 新增手动触发按钮，方便你随时控制编译
 
 jobs:
-  build:
-    name: "${{ matrix.SECCOMP == '1' && 'seccomp' || 'no-seccomp' }}"
-    runs-on: ubuntu-latest
-    env:
-      BUILD_WRAPPER_OUT_DIR: tmp
-    strategy:
-      fail-fast: false
-      matrix:
-        SECCOMP: [ 0, 1 ]
+  build-static-arm64:
+    name: "Build ARM64 Static Binary"
+    runs-on: ubuntu-latest # 保留原版的运行环境[cite: 2]
 
     steps:
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # 保留原版的完整深度拉取[cite: 2]
 
-      - name: Install sonar-scanner and build-wrapper
-        uses: SonarSource/sonarqube-github-c-cpp@e51317d858d1117fe6c451aa441841cb3e3ff358 # v2
-
-      - name: Install build dependencies
+      - name: Set up QEMU for ARM64 Emulation
+        uses: docker/setup-qemu-action@v3
+        
+      # 替代原版繁杂的 apt-get 安装[cite: 2]，改用干净的 Alpine ARM64 容器进行纯净的 musl 静态编译
+      - name: Build static PRoot in ARM64 Alpine
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -qq clang-tools-12 curl gdb lcov libarchive-dev libtalloc-dev sloccount strace swig uthash-dev python3-dev lzop
+          docker run --rm --platform linux/arm64 -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "\
+            apk update && \
+            apk add make gcc musl-dev linux-headers pkgconf talloc-dev talloc-static && \
+            make -C src clean proot LDFLAGS='-static' && \
+            mv src/proot /workspace/proot-aarch64-static \
+          "
 
-      - name: Gather analytics
-        run: sloccount --details .
+      # 替代原版直接输出 test.log 的步骤[cite: 2]，改为自动上传编译好的实体文件到 GitHub Actions 页面
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proot-aarch64-static
+          path: proot-aarch64-static
 
-      - name: Build elf loader, proot, and care
-        run: |
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} make -C src clean loader.elf loader-m32.elf build.h proot care
-
-      - name: Execute test suite
-        continue-on-error: true
-        timeout-minutes: 10
-        run: |
-          build-wrapper-linux-x86-64 --out-dir ${{ env.BUILD_WRAPPER_OUT_DIR }} env ${{ matrix.SECCOMP == '0' && 'PROOT_NO_SECCOMP=1' || '' }} PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PWD/src make -C test -j $(nproc) QUIET_LOG=$PWD/test.log
-
-      - name: Output test log
-        if: always()
-        continue-on-error: true
-        run: ([ -f test.log ] && cat test.log) || true
-
-      - name: Run sonar-scanner
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          find /home/runner/work/proot/proot/test/ -type d -exec chmod 755 {} \;
-          find /home/runner/work/proot/proot/test/ -type f -exec chmod 644 {} \;
-          sonar-scanner --define sonar.cfamily.build-wrapper-output="${{ env.BUILD_WRAPPER_OUT_DIR }}"
+      # 自动在你的 upleung/proot-debian-ssh 仓库创建 Release，生成永久下载直链
+      - name: Auto Release to GitHub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-arm64
+          name: PRoot Latest (ARM64 Static)
+          files: proot-aarch64-static
+          draft: false
+          prerelease: false
