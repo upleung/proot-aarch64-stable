@@ -23,9 +23,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
         
       - name: Build static PRoot in ARM64 Alpine
-        # 修复 1: git config 白名单
-        # 修复 2: sed 注入头文件
-        # 修复 3: 强制 LDLIBS 链接 libtalloc 静态库解决 undefined reference
+        # 终极修复：增加 HAS_TALLOC=1 强制使用系统库，移除所有链接冲突
         run: |
           docker run --rm --platform linux/arm64 -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "\
             apk update && \
@@ -33,7 +31,7 @@ jobs:
             git config --global --add safe.directory /workspace && \
             sed -i '1i#include <libgen.h>' src/cli/cli.c && \
             sed -i '1i#include \"tracee/mem.h\"' src/tracee/tracee.c && \
-            make -C src clean proot LDFLAGS='-static' LDLIBS='-ltalloc' && \
+            make -C src clean proot HAS_TALLOC=1 LDFLAGS='-static' LDLIBS='-ltalloc' && \
             mv src/proot /workspace/proot-aarch64-static \
           "
 
