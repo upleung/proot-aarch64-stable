@@ -24,13 +24,15 @@ jobs:
         
       - name: Build static PRoot in ARM64 Alpine
         # 修复 1: git config 添加安全目录白名单
-        # 修复 2: sed 动态向 cli.c 顶部注入 <libgen.h> 头文件
+        # 修复 2: 注入 <libgen.h> 解决 basename 报错
+        # 修复 3: 注入 "tracee/mem.h" 解决 peek_word 函数未声明报错
         run: |
           docker run --rm --platform linux/arm64 -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "\
             apk update && \
             apk add git make gcc musl-dev linux-headers pkgconf talloc-dev talloc-static bsd-compat-headers && \
             git config --global --add safe.directory /workspace && \
             sed -i '1i#include <libgen.h>' src/cli/cli.c && \
+            sed -i '1i#include \"tracee/mem.h\"' src/tracee/tracee.c && \
             make -C src clean proot LDFLAGS='-static' && \
             mv src/proot /workspace/proot-aarch64-static \
           "
