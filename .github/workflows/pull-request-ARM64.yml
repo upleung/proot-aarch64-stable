@@ -3,43 +3,41 @@ name: Compile PRoot Static (ARM64)
 on:
   push:
     branches:
-      - master  # 保留原版的 master 分支推送触发
+      - master
   pull_request:
-    types: [opened, synchronize, reopened] # 保留原版的 PR 触发[cite: 2]
-  workflow_dispatch: # 新增手动触发按钮，方便你随时控制编译
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   build-static-arm64:
     name: "Build ARM64 Static Binary"
-    runs-on: ubuntu-latest # 保留原版的运行环境[cite: 2]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # 保留原版的完整深度拉取[cite: 2]
+          fetch-depth: 0
 
       - name: Set up QEMU for ARM64 Emulation
         uses: docker/setup-qemu-action@v3
         
-      # 替代原版繁杂的 apt-get 安装[cite: 2]，改用干净的 Alpine ARM64 容器进行纯净的 musl 静态编译
       - name: Build static PRoot in ARM64 Alpine
+        # 补齐了 git 和 bsd-compat-headers 依赖，完美适配 musl 静态编译环境
         run: |
           docker run --rm --platform linux/arm64 -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "\
             apk update && \
-            apk add make gcc musl-dev linux-headers pkgconf talloc-dev talloc-static && \
+            apk add git make gcc musl-dev linux-headers pkgconf talloc-dev talloc-static bsd-compat-headers && \
             make -C src clean proot LDFLAGS='-static' && \
             mv src/proot /workspace/proot-aarch64-static \
           "
 
-      # 替代原版直接输出 test.log 的步骤[cite: 2]，改为自动上传编译好的实体文件到 GitHub Actions 页面
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: proot-aarch64-static
           path: proot-aarch64-static
 
-      # 自动在你的 upleung/proot-debian-ssh 仓库创建 Release，生成永久下载直链
       - name: Auto Release to GitHub
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: softprops/action-gh-release@v2
