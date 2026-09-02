@@ -23,11 +23,14 @@ jobs:
         uses: docker/setup-qemu-action@v3
         
       - name: Build static PRoot in ARM64 Alpine
-        # 补齐了 git 和 bsd-compat-headers 依赖，完美适配 musl 静态编译环境
+        # 修复 1: git config 添加安全目录白名单
+        # 修复 2: sed 动态向 cli.c 顶部注入 <libgen.h> 头文件
         run: |
           docker run --rm --platform linux/arm64 -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "\
             apk update && \
             apk add git make gcc musl-dev linux-headers pkgconf talloc-dev talloc-static bsd-compat-headers && \
+            git config --global --add safe.directory /workspace && \
+            sed -i '1i#include <libgen.h>' src/cli/cli.c && \
             make -C src clean proot LDFLAGS='-static' && \
             mv src/proot /workspace/proot-aarch64-static \
           "
