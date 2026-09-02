@@ -13,9 +13,8 @@ jobs:
     name: Build ${{ matrix.arch }}
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false # 即使某个架构失败，也不中断其他架构的编译
+      fail-fast: false
       matrix:
-        # 定义需要编译的三种架构及其对应的 Docker 平台环境
         include:
           - arch: aarch64
             platform: linux/arm64
@@ -34,6 +33,7 @@ jobs:
         uses: docker/setup-qemu-action@v3
 
       - name: Build static PRoot in Alpine (${{ matrix.arch }})
+        # 终极修复：向 CFLAGS 注入 -fomit-frame-pointer，解决 ARMv7 下的 r7 寄存器汇编死锁
         run: |
           docker run --rm --platform ${{ matrix.platform }} -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "\
             apk update && \
@@ -41,7 +41,7 @@ jobs:
             git config --global --add safe.directory /workspace && \
             sed -i '1i#include <libgen.h>' src/cli/cli.c && \
             sed -i '1i#include \"tracee/mem.h\"' src/tracee/tracee.c && \
-            make -C src clean proot HAS_TALLOC=1 LDFLAGS='-static -ltalloc' CFLAGS='-I/usr/include' && \
+            make -C src clean proot HAS_TALLOC=1 LDFLAGS='-static -ltalloc' CFLAGS='-I/usr/include -fomit-frame-pointer' && \
             mv src/proot /workspace/proot-v5.4.0-${{ matrix.arch }}-static \
           "
 
@@ -51,10 +51,9 @@ jobs:
           name: proot-v5.4.0-${{ matrix.arch }}-static
           path: proot-v5.4.0-${{ matrix.arch }}-static
 
-  # 在所有架构都编译完成后，打包发布 Release
   release:
     name: Auto Release to GitHub
-    needs: build-static # 等待 build-static 矩阵里的三个任务全部完成
+    needs: build-static
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
@@ -62,7 +61,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          merge-multiple: true # 将下载的文件合并到同一个目录中
+          merge-multiple: true
 
       - name: Create Multi-Arch Release
         uses: softprops/action-gh-release@v2
